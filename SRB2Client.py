@@ -1162,41 +1162,40 @@ async def item_handler(ctx):
             continue
         for i in ctx.items_received:
             id = i[0]
-            if id==1|id==2|id==3|id==4:
+            if id==1 or id==2 or id==3 or id==4:
                 continue#in the future it would be efficient to always hold a list of sent items so the file doesnt
-                #have to be read every second
-            if id in locs_received:
+            if id in locs_received:#have to be read every second
                 continue
             if id == 10:#greenflower
-                final_write[0] = final_write[0] or 1
+                final_write[0] = final_write[0] + 1
             if id == 11:#techno hill
-                final_write[0] = final_write[0] or 2
+                final_write[0] = final_write[0] + 2
             if id == 12:#deep sea
-                final_write[0] = final_write[0] or 4
+                final_write[0] = final_write[0] + 4
             if id == 13:#castle eggman
-                final_write[0] = final_write[0] or 8
+                final_write[0] = final_write[0] + 8
             if id == 14:#arid canyon
-                final_write[0] = final_write[0] or 16
+                final_write[0] = final_write[0] + 16
             if id == 15:#red volcano
-                final_write[0] = final_write[0] or 32
+                final_write[0] = final_write[0] + 32
             if id == 16:#egg rock
-                final_write[0] = final_write[0] or 64
+                final_write[0] = final_write[0] + 64
             if id == 17:#black core
-                final_write[0] = final_write[0] or 128
+                final_write[0] = final_write[0] + 128
             if id == 18: #frozen hillside
-                final_write[1] = final_write[1] or 8
+                final_write[1] = final_write[1] + 8
             if id == 19: #pipe towers
-                final_write[1] = final_write[1] or 16
+                final_write[1] = final_write[1] + 16
             if id == 20: #forest fortress
-                final_write[1] = final_write[1] or 32
+                final_write[1] = final_write[1] + 32
             if id == 21: #final demo
-                final_write[1] = final_write[1] or 64
+                final_write[1] = final_write[1] + 64
             if id == 22: #haunted heights
-                final_write[1] = final_write[1] or 1
+                final_write[1] = final_write[1] + 1
             if id == 23: #aerial garden
-                final_write[1] = final_write[1] or 2
+                final_write[1] = final_write[1] + 2
             if id == 24: #azure temple
-                final_write[1] = final_write[1] or 4
+                final_write[1] = final_write[1] + 4
             locs_received.append(id)
 
 
@@ -1204,14 +1203,14 @@ async def item_handler(ctx):
 
 
 
-
+        print(locs_received)
         f.seek(0x37)
         print(bytes(final_write))
         f.write(bytes(final_write))#TODO change to only write on startup, file close, or new item received
         f.seek(0x10)
         f.write(0x7D.to_bytes(2,byteorder="little"))
         print("wrote new file data")
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
 
 
 async def file_watcher(ctx):
