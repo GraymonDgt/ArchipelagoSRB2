@@ -1151,7 +1151,7 @@ async def item_handler(ctx):
                                            filetypes=((".ssg Files", "*.ssg"), ("All Files", "*.*")))
     f = open(file_path, 'r+b')
     #set up new save file here
-    f.seek(0x32)
+    f.seek(0x31)
     file_fixer = [0xb7,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1d]
     f.write(bytes(file_fixer))
     final_write = []
