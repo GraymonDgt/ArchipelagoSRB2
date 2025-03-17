@@ -1151,10 +1151,10 @@ async def item_handler(ctx):
                                            filetypes=((".ssg Files", "*.ssg"), ("All Files", "*.*")))
     f = open(file_path, 'r+b')
     #set up new save file here
-    f.seek(0x31)
-    file_fixer = [0xb7,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1d]
+    f.seek(0x28) # fixes header to include lua banks
+    file_fixer = [0x04,0x6c,0xcf,0x00,0x00,0x01,0x00,0x00,0x00,0xb7,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1d]
     f.write(bytes(file_fixer))
-    final_write = []
+    final_write = [0,0]
     locs_received = []
     while True:
         while ctx.total_locations is None:
@@ -1168,35 +1168,35 @@ async def item_handler(ctx):
             if id in locs_received:
                 continue
             if id == 10:#greenflower
-                final_write[0] = final_write[0] | 1
+                final_write[0] = final_write[0] or 1
             if id == 11:#techno hill
-                final_write[0] = final_write[0] | 2
+                final_write[0] = final_write[0] or 2
             if id == 12:#deep sea
-                final_write[0] = final_write[0] | 4
+                final_write[0] = final_write[0] or 4
             if id == 13:#castle eggman
-                final_write[0] = final_write[0] | 8
+                final_write[0] = final_write[0] or 8
             if id == 14:#arid canyon
-                final_write[0] = final_write[0] | 16
+                final_write[0] = final_write[0] or 16
             if id == 15:#red volcano
-                final_write[0] = final_write[0] | 32
+                final_write[0] = final_write[0] or 32
             if id == 16:#egg rock
-                final_write[0] = final_write[0] | 64
+                final_write[0] = final_write[0] or 64
             if id == 17:#black core
-                final_write[0] = final_write[0] | 128
+                final_write[0] = final_write[0] or 128
             if id == 18: #frozen hillside
-                final_write[1] = final_write[1] | 8
+                final_write[1] = final_write[1] or 8
             if id == 19: #pipe towers
-                final_write[1] = final_write[1] | 16
+                final_write[1] = final_write[1] or 16
             if id == 20: #forest fortress
-                final_write[1] = final_write[1] | 32
+                final_write[1] = final_write[1] or 32
             if id == 21: #final demo
-                final_write[1] = final_write[1] | 64
+                final_write[1] = final_write[1] or 64
             if id == 22: #haunted heights
-                final_write[1] = final_write[1] | 1
+                final_write[1] = final_write[1] or 1
             if id == 23: #aerial garden
-                final_write[1] = final_write[1] | 2
+                final_write[1] = final_write[1] or 2
             if id == 24: #azure temple
-                final_write[1] = final_write[1] | 4
+                final_write[1] = final_write[1] or 4
             locs_received.append(id)
 
 
@@ -1204,12 +1204,12 @@ async def item_handler(ctx):
 
 
 
-        binary_data = struct.pack('i', final_write)
+
         f.seek(0x37)
-        print(binary_data)
-        f.write(binary_data)#TODO change to only write on startup, file close, or new item received
+        print(bytes(final_write))
+        f.write(bytes(final_write))#TODO change to only write on startup, file close, or new item received
         f.seek(0x10)
-        f.write(0x7D.to_bytes(2,byteorder="big"))
+        f.write(0x7D.to_bytes(2,byteorder="little"))
         print("wrote new file data")
         await asyncio.sleep(1)
 
