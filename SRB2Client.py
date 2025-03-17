@@ -1153,7 +1153,7 @@ async def item_handler(ctx):
     #set up new save file here
     f.seek(0x32)
     file_fixer = [0xb7,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1d]
-    fwrite(bytes(file_fixer))
+    f.write(bytes(file_fixer))
     final_write = []
     locs_received = []
     while True:
@@ -1204,7 +1204,7 @@ async def item_handler(ctx):
 
 
 
-        binary_data = struct.pack('i', final_write1)
+        binary_data = struct.pack('i', final_write)
         f.seek(0x37)
         print(binary_data)
         f.write(binary_data)#TODO change to only write on startup, file close, or new item received
