@@ -1173,9 +1173,13 @@ async def item_handler(ctx):
         while ctx.total_locations is None:
             await asyncio.sleep(1)
             continue
+        emeralds = 0
         for i in ctx.items_received:
             id = i[0]
-            if id==1 or id==2 or id==3 or id==4:
+            if id == 2:
+                emeralds+=1
+                continue
+            if id==1 or id==3 or id==4:
                 continue#in the future it would be efficient to always hold a list of sent items so the file doesnt
             if id in locs_received:#have to be read every second
                 continue
@@ -1242,7 +1246,25 @@ async def item_handler(ctx):
             if id == 35: #alpine praradise
                 final_write[3] = final_write[3] + 64
             locs_received.append(id)
-
+        if emeralds>7:
+            emeralds = 7
+        f.seek(0x12)
+        if emeralds == 0:
+            f.write(0x65.to_bytes(2,byteorder="little")) #this sucks
+        if emeralds == 1:
+            f.write(0x66.to_bytes(2,byteorder="little")) #this sucks
+        if emeralds == 2:
+            f.write(0x68.to_bytes(2,byteorder="little")) #this sucks
+        if emeralds == 3:
+            f.write(0x6C.to_bytes(2,byteorder="little")) #this sucks
+        if emeralds == 4:
+            f.write(0x74.to_bytes(2,byteorder="little")) #this sucks
+        if emeralds == 5:
+            f.write(0x84.to_bytes(2,byteorder="little")) #this sucks
+        if emeralds == 6:
+            f.write(0xA4.to_bytes(2, byteorder="little"))  # this sucks
+        if emeralds == 7:
+            f.write(0xE4.to_bytes(2, byteorder="little"))  # this sucks
         f.seek(0x23)  # check length of skin name to write bytes in correct location
         offset = 0
         while True:
@@ -1257,6 +1279,9 @@ async def item_handler(ctx):
         f.write(bytes(final_write))#TODO change to only write on startup, file close, or new item received
         f.seek(0x10)
         f.write(0x7D.to_bytes(2,byteorder="little"))
+
+
+
         print("wrote new file data")
         await asyncio.sleep(3)
 
@@ -1285,6 +1310,11 @@ async def file_watcher(ctx):
                 byte = int.from_bytes(f.read(1), 'little')
                 if byte > 0:
                     locs_to_send.add(197)
+                    ctx.finished_game = True
+                    await ctx.send_msgs([{
+                        "cmd": "StatusUpdate",
+                        "status": ClientStatus.CLIENT_GOAL
+                    }])
 
             f.close()
             # Compare locs_to_send to locations already sent
