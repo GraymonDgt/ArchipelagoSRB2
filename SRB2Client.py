@@ -1151,10 +1151,23 @@ async def item_handler(ctx):
                                            filetypes=((".ssg Files", "*.ssg"), ("All Files", "*.*")))
     f = open(file_path, 'r+b')
     #set up new save file here
-    f.seek(0x28) # fixes header to include lua banks
-    file_fixer = [0x04,0x6c,0xcf,0x00,0x00,0x01,0x00,0x00,0x00,0xb7,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1d]
+
+    f.seek(0x23)#check length of skin name to write bytes in correct location
+    offset = 0
+    while True:
+        x = f.read(1)
+        if x == b'\x00':
+            break
+        print(x)
+        offset = offset + 1
+        f.seek(0x23+offset)
+    print(offset)
+    f.seek(0x26+offset) # fixes header to include lua banks
+
+
+    file_fixer = [0x03,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0xb7,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1d]
     f.write(bytes(file_fixer))
-    final_write = [0,0]
+    final_write = [0,0,0,0]
     locs_received = []
     while True:
         while ctx.total_locations is None:
@@ -1196,16 +1209,51 @@ async def item_handler(ctx):
                 final_write[1] = final_write[1] + 2
             if id == 24: #azure temple
                 final_write[1] = final_write[1] + 4
+            if id == 50: #tails
+                final_write[1] = final_write[1] + 128
+            if id == 51: #knuckles
+                final_write[2] = final_write[2] + 1
+            if id == 53: #fang
+                final_write[2] = final_write[2] + 2
+            if id == 52: #amy
+                final_write[2] = final_write[2] + 4
+            if id == 54: #metal sonic
+                final_write[2] = final_write[2] + 8
+            if id == 25: #floral fields
+                final_write[2] = final_write[2] + 16
+            if id == 26: #toxic plateau
+                final_write[2] = final_write[2] + 32
+            if id == 27: #flooded cove
+                final_write[2] = final_write[2] + 64
+            if id == 28: #cavern fortress
+                final_write[2] = final_write[2] + 128
+            if id == 29: #dusty wasteland
+                final_write[3] = final_write[3] + 1
+            if id == 30: #magma caves
+                final_write[3] = final_write[3] + 2
+            if id == 31: #egg satellite
+                final_write[3] = final_write[3] + 4
+            if id == 32: #black hole
+                final_write[3] = final_write[3] + 8
+            if id == 33: #christmas chime
+                final_write[3] = final_write[3] + 16
+            if id == 34: #dream hill
+                final_write[3] = final_write[3] + 32
+            if id == 35: #alpine praradise
+                final_write[3] = final_write[3] + 64
             locs_received.append(id)
 
+        f.seek(0x23)  # check length of skin name to write bytes in correct location
+        offset = 0
+        while True:
+            x = f.read(1)
+            if x == b'\x00':
+                break
+            offset = offset + 1
+            f.seek(0x23 + offset)
 
+        f.seek(0x35+offset)
 
-
-
-
-        print(locs_received)
-        f.seek(0x37)
-        print(bytes(final_write))
         f.write(bytes(final_write))#TODO change to only write on startup, file close, or new item received
         f.seek(0x10)
         f.write(0x7D.to_bytes(2,byteorder="little"))
@@ -1233,7 +1281,10 @@ async def file_watcher(ctx):
                         bit = (byte >> j) & 1
                         if bit==1:
                             locs_to_send.add(8*i + j)
-
+                f.seek(0x457)
+                byte = int.from_bytes(f.read(1), 'little')
+                if byte > 0:
+                    locs_to_send.add(197)
 
             f.close()
             # Compare locs_to_send to locations already sent
