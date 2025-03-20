@@ -560,14 +560,14 @@ class CommonContext:
             await self.ui_task
         if self.input_task:
             self.input_task.cancel()
-    
+
     # Hints
     def update_hint(self, location: int, finding_player: int, status: typing.Optional[HintStatus]) -> None:
         msg = {"cmd": "UpdateHint", "location": location, "player": finding_player}
         if status is not None:
             msg["status"] = status
         async_start(self.send_msgs([msg]), name="update_hint")
-    
+
     # DataPackage
     async def prepare_data_package(self, relevant_games: typing.Set[str],
                                    remote_date_package_versions: typing.Dict[str, int],
@@ -1072,7 +1072,7 @@ def handle_url_arg(args: "argparse.Namespace",
     """
     if not args.url:
         return args
-        
+
     url = urllib.parse.urlparse(args.url)
     if url.scheme != "archipelago":
         if not parser:
@@ -1308,13 +1308,18 @@ async def file_watcher(ctx):
                             locs_to_send.add(8*i + j)
                 f.seek(0x457)
                 byte = int.from_bytes(f.read(1), 'little')
-                if byte > 0:
+                if (byte and 1) == 1:
                     locs_to_send.add(197)
+                if (byte and 2) == 2:
+                    locs_to_send.add(198)
                     ctx.finished_game = True
                     await ctx.send_msgs([{
                         "cmd": "StatusUpdate",
                         "status": ClientStatus.CLIENT_GOAL
                     }])
+                if (byte and 4) == 4:#azure temple clear
+                    locs_to_send.add(199)
+
 
             f.close()
             # Compare locs_to_send to locations already sent
