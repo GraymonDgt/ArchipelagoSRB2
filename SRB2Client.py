@@ -409,16 +409,16 @@ class CommonContext:
             self.disconnected_intentionally = True
             if self.cancel_autoreconnect():
                 logger.info("Cancelled auto-reconnect.")
-        if self.server and not self.server.socket.closed:
-            await self.server.socket.close()
+        #if self.server and not self.server.socket.closed:
+        #    await self.server.socket.close()
         if self.server_task is not None:
             await self.server_task
         self.ui.update_hints()
 
     async def send_msgs(self, msgs: typing.List[typing.Any]) -> None:
         """ `msgs` JSON serializable """
-        if not self.server or not self.server.socket.open or self.server.socket.closed:
-            return
+        #if not self.server or not self.server.socket.open or self.server.socket.closed:
+        #    return
         await self.server.socket.send(encode(msgs))
 
     def consume_players_package(self, package: typing.List[tuple]):
@@ -1317,7 +1317,7 @@ async def file_watcher(ctx):
                         "cmd": "StatusUpdate",
                         "status": ClientStatus.CLIENT_GOAL
                     }])
-                if (byte and 4) == 4:#azure temple clear
+                if (byte & 4) == 4:#azure temple clear
                     locs_to_send.add(199)
 
 
