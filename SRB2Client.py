@@ -18,6 +18,7 @@ import websockets
 import threading
 import Utils
 import struct
+import math
 if __name__ == "__main__":
     Utils.init_logging("TextClient", exception_logger="Client")
 
@@ -652,6 +653,7 @@ class CommonContext:
         """Gets dispatched when a new DeathLink is triggered by another linked player."""
         self.last_death_link = max(data["time"], self.last_death_link)
         text = data.get("cause", "")
+        print("kill yourself")
         if text:
             logger.info(f"DeathLink: {text}")
         else:
@@ -1117,8 +1119,9 @@ def run_as_textclient(*args):
         ctx.auth = args.name
         ctx.server_task = asyncio.create_task(server_loop(ctx), name="server loop")
         loop = asyncio.get_running_loop()
-        loop.create_task(file_watcher(ctx), name="save data watcher")
-        loop.create_task(item_handler(ctx), name="incoming item handler")
+        file_path = filedialog.askdirectory(title="Select SRB2 root folder")
+        loop.create_task(file_watcher(ctx, file_path), name="save data watcher")
+        loop.create_task(item_handler(ctx, file_path), name="incoming item handler")
         # why the fuck does it work now
 
         if gui_enabled:
@@ -1146,43 +1149,54 @@ def run_as_textclient(*args):
 def make_thread():
     print("in makethread")
 
-async def item_handler(ctx):
-    file_path = filedialog.askopenfilename(title="Select srb2sav1.ssg",
-                                           filetypes=((".ssg Files", "*.ssg"), ("All Files", "*.*")))
-    f = open(file_path, 'r+b')
+async def item_handler(ctx,file_path):
+    file_path = file_path+"/luafiles/APTranslator.dat"
+    f = open(file_path, 'w+b')
     #set up new save file here
-
-    f.seek(0x23)#check length of skin name to write bytes in correct location
-    offset = 0
-    while True:
-        x = f.read(1)
-        if x == b'\x00':
-            break
-        print(x)
-        offset = offset + 1
-        f.seek(0x23+offset)
-    print(offset)
-    f.seek(0x26+offset) # fixes header to include lua banks
-
-
-    file_fixer = [0x03,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0xb7,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1d]
-    f.write(bytes(file_fixer))
+    #dont need to zero anything out because the first write will overwrite everything wrong
     final_write = [0,0,0,0]
     locs_received = []
+    sent_shields = [0,0,0,0,0,0,0,0]
+
+
     while True:
         while ctx.total_locations is None:
             await asyncio.sleep(1)
             continue
+        traps = 0
         emeralds = 0
+        emblemhints = 0
+        f.seek(0x12)
+        num_traps = int.from_bytes(f.read(2), 'little')
+
         for i in ctx.items_received:
             id = i[0]
             if id == 2:
                 emeralds+=1
                 continue
-            if id==1 or id==3 or id==4:
-                continue#in the future it would be efficient to always hold a list of sent items so the file doesnt
+            if id==1:
+                continue
+            if id == 3:
+                emblemhints+=1
+            if id==4 or id==5 or id==6:
+                traps += 1
+                if traps>num_traps:
+
+                    f.seek(0x02)
+                    if id == 4: #1up
+                        f.write(0x01.to_bytes(2,byteorder="little"))
+                    if id == 6:# pity shield
+                        f.write(0x02.to_bytes(2,byteorder="little"))
+                    if id == 5:# gravity boots
+                        f.write(0x03.to_bytes(2,byteorder="little"))
+                    f.seek(0x12)
+                    f.write(traps.to_bytes(2,byteorder="little"))
+
+                continue
+                #in the future it would be efficient to always hold a list of sent items so the file doesnt
             if id in locs_received:#have to be read every second
                 continue
+
             if id == 10:#greenflower
                 final_write[0] = final_write[0] + 1
             if id == 11:#techno hill
@@ -1245,60 +1259,157 @@ async def item_handler(ctx):
                 final_write[3] = final_write[3] + 32
             if id == 35: #alpine praradise
                 final_write[3] = final_write[3] + 64
+            if id == 56: #whirlwind
+                sent_shields[0] = 1
+            if id == 57: #armageddon
+                sent_shields[1] = 1
+            if id == 58: #elemental
+                sent_shields[2] = 1
+            if id == 59: #attraction
+                sent_shields[3] = 1
+            if id == 60: #force
+                sent_shields[4] = 1
+            if id == 61: #flame
+                sent_shields[5] = 1
+            if id == 62: #bubble
+                sent_shields[6] = 1
+            if id == 56: #lightning
+                sent_shields[7] = 1
             locs_received.append(id)
-        if emeralds>7:
+         #this would be so much better if i made a list of everything and then wrote it to the file all at once
+        f.seek(0x14)
+        f.write(emblemhints.to_bytes(1, byteorder="little"))  # this sucks
+        if emeralds>7: #just in case someone cheats in more emeralds
             emeralds = 7
-        f.seek(0x12)
+        f.seek(0x0F)
         if emeralds == 0:
-            f.write(0x65.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x01.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 1:
-            f.write(0x66.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x03.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 2:
-            f.write(0x68.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x07.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 3:
-            f.write(0x6C.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x0F.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 4:
-            f.write(0x74.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x1F.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 5:
-            f.write(0x84.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x3F.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 6:
-            f.write(0xA4.to_bytes(2, byteorder="little"))  # this sucks
+            f.write(0x3F.to_bytes(2, byteorder="little"))  # this sucks
         if emeralds == 7:
-            f.write(0xE4.to_bytes(2, byteorder="little"))  # this sucks
-        f.seek(0x23)  # check length of skin name to write bytes in correct location
-        offset = 0
-        while True:
-            x = f.read(1)
-            if x == b'\x00':
-                break
-            offset = offset + 1
-            f.seek(0x23 + offset)
+            f.write(0x7F.to_bytes(2, byteorder="little"))  # this sucks
 
-        f.seek(0x35+offset)
-
+        f.seek(0x03)
+        f.write(bytes(sent_shields))
+        f.seek(0x0B)
         f.write(bytes(final_write))#TODO change to only write on startup, file close, or new item received
-        f.seek(0x10)
-        f.write(0x7D.to_bytes(2,byteorder="little"))
+        #f.seek(0x10) #always select No save to go back to the ap hub
+        #f.write(0x7D.to_bytes(2,byteorder="little")) #or find a console command that does that
+        #todo handle deathlink traps and 1ups
+        #if "DeathLink" in ctx.tags:
+        #    send_death()
 
-
-
-        print("wrote new file data")
+        #print("wrote new file data")
         await asyncio.sleep(3)
 
 
-async def file_watcher(ctx):
+async def file_watcher(ctx,file_path):
     locs_to_send = set()
-    file_path = filedialog.askopenfilename(title="Select SRB2 gamedata.dat", filetypes=((".dat Files", "*.dat"), ("All Files", "*.*")))
-    previous = os.stat(file_path).st_mtime
+    file_path2 = file_path+"/apgamedat.dat"
+
+    while ctx.total_locations is None:
+        await asyncio.sleep(1)
+        continue
+    #wait to connect
+    try:# once connected verify apgamedat exists
+        if not os.path.isfile(file_path2):
+            raise FileNotFoundError #stupid code
+        f = open(file_path2, 'r+b')
+        checkma = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        levelclears = [0,0,0,0,0,0]
+        for i in ctx.checked_locations:
+            if i >196:
+                x = i -197
+                r1 = math.floor(x / 8)
+                r2 = x % 8
+
+                if r2 == 0:
+                    levelclears[r1]+=1
+                if r2 == 1:
+                    levelclears[r1]+=2
+                if r2 == 2:
+                    levelclears[r1]+=4
+                if r2 == 3:
+                    levelclears[r1]+=8
+                if r2 == 4:
+                    levelclears[r1]+=16
+                if r2 == 5:
+                    levelclears[r1]+=32
+                if r2 == 6:
+                    levelclears[r1]+=64
+                if r2 == 7:
+                    levelclears[r1]+=128
+            if i <197:
+                r1 = math.floor(i/8)
+                r2 = i % 8
+                #divide then floor to get byte number
+                #modulo to get byte value to set
+                if r2 == 0:
+                    checkma[r1]+=1
+                if r2 == 1:
+                    checkma[r1]+=2
+                if r2 == 2:
+                    checkma[r1]+=4
+                if r2 == 3:
+                    checkma[r1]+=8
+                if r2 == 4:
+                    checkma[r1]+=16
+                if r2 == 5:
+                    checkma[r1]+=32
+                if r2 == 6:
+                    checkma[r1]+=64
+                if r2 == 7:
+                    checkma[r1]+=128
+        f.seek(0x417)
+        f.write(bytes(checkma))
+        f.seek(0x457)
+        f.write(bytes(levelclears))
+        f.seek(0x467)
+        f.write(bytes(levelclears))
+        f.close()
+    except FileNotFoundError:
+        print("apgamedat.dat does not exist, let SRB2 make a new one...")
+    except PermissionError:
+        print("could not overwrite old save data (lack of permission). Try closing the file in HXD you dumbass")
+
+    cfg = open(file_path+"/AUTOEXEC.CFG","w")
+    cfg.write("addfile addons/ArchipelagoSRB2.pk3")
+    cfg.close()
+    os.chdir(file_path)
+    os.startfile("srb2win.exe")
+    #look into subprocess.Popen, if used correctly, i might be able to acess srb2's console output for commands and
+    #recieved notifications
+    time.sleep(8)
+    cfg = open(file_path + "/AUTOEXEC.CFG", "w")
+    cfg.write("")
+    cfg.close()
+    # if not do nothing (srb2 will create an empty gamedat on launch)
+    # if it does, get checked locations from the server, and overwrite corresponding bits in apgamedat
+
+    # create AUTOEXEC.CFG with the text "addfile addons/ArchipelagoSRB2.pk3"
+    # launch srb2
+    # clear AUTOEXEC.CFG so people dont get confused when they cant uninstall the ap mod
+
+    previous = os.stat(file_path2).st_mtime
     while True:
         #run the console command to get recieved items
 
-        current = os.stat(file_path).st_mtime
+        current = os.stat(file_path2).st_mtime
         if current != previous:
 
             previous = current
-            with open(file_path, 'rb') as f:
-                f.seek(0x417)#start of the emblem save file
+            with open(file_path2, 'rb') as f:
+                f.seek(0x417)# start of the emblem save file
                 for i in range(0,0x19):
                     byte = int.from_bytes(f.read(1), 'little')
                     #convert each check into corresponding location number
@@ -1307,18 +1418,18 @@ async def file_watcher(ctx):
                         if bit==1:
                             locs_to_send.add(8*i + j)
                 f.seek(0x457)
-                byte = int.from_bytes(f.read(1), 'little')
-                if (byte and 1) == 1:
-                    locs_to_send.add(197)
-                if (byte and 2) == 2:
-                    locs_to_send.add(198)
-                    ctx.finished_game = True
-                    await ctx.send_msgs([{
-                        "cmd": "StatusUpdate",
-                        "status": ClientStatus.CLIENT_GOAL
-                    }])
-                if (byte & 4) == 4:#azure temple clear
-                    locs_to_send.add(199)
+                for i in range(0, 0x5):
+                    byte = int.from_bytes(f.read(1), 'little')
+                    for j in range(8):
+                        bit = (byte >> j) & 1
+                        if bit==1:
+                            locs_to_send.add(197+(8*i + j))
+                            if 197+(8*i + j) == 237: #good ending
+                                ctx.finished_game = True
+                                await ctx.send_msgs([{
+                                    "cmd": "StatusUpdate",
+                                    "status": ClientStatus.CLIENT_GOAL
+                                }])
 
 
             f.close()
