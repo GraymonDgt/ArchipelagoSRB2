@@ -658,7 +658,7 @@ class CommonContext:
         """Gets dispatched when a new DeathLink is triggered by another linked player."""
         self.last_death_link = max(data["time"], self.last_death_link)
         text = data.get("cause", "")
-        print("kill yourself")
+
         if text:
             logger.info(f"DeathLink: {text}")
         else:
@@ -1337,12 +1337,13 @@ async def item_handler(ctx,file_path):
         f.seek(0x01)
         is_dead = int.from_bytes(f.read(1), 'little')
 
-        if ctx.death_link_lockout+3<=time.time():
+        if ctx.death_link_lockout+4<=time.time():
 
-            if ctx.last_death_link+1.1>= time.time():#if a deathlink happened less than 2 seconds ago, kill yourself
+            if ctx.last_death_link+1.5>= time.time():#if a deathlink happened less than 2 seconds ago, kill yourself
                 f.seek(0x00)#received deathlink
                 f.write(0x01.to_bytes(1,byteorder="little"))
                 ctx.death_link_lockout = time.time()
+                print("kill yourself")
 
             if is_dead!=0: #outgoing deathlink
                 f.seek(0x01)
@@ -1350,10 +1351,10 @@ async def item_handler(ctx,file_path):
                 await ctx.send_death("Egg Rock Zone was too hard for {player}")
                 ctx.death_link_lockout = time.time()
                 print("killed myself")
-        #f.seek(0x01)
-        #f.write(0x00.to_bytes(1, byteorder="little"))
-        #write 0s to both slots if conditions havent been met
-
+        else:
+            #write 0s to both slots if conditions havent been met
+            f.seek(0x01)
+            f.write(0x00.to_bytes(1, byteorder="little"))
         #print("wrote new file data")
         await asyncio.sleep(1)
 
