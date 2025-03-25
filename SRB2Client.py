@@ -188,6 +188,7 @@ class CommonContext:
     tags: typing.Set[str] = {"AP"}
     game: typing.Optional[str] = None
     items_handling: typing.Optional[int] = None
+    items_handling: typing.Optional[int] = None
     want_slot_data: bool = True  # should slot_data be retrieved via Connect
 
     class NameLookupDict:
@@ -280,7 +281,9 @@ class CommonContext:
     max_size: int = 16*1024*1024  # 16 MB of max incoming packet size
 
     last_death_link: float = time.time()  # last send/received death link on AP layer
-
+    death_link: float = time.time()
+    death_link_lockout: float = time.time()
+    goal_type: int = None
     # remaining type info
     slot_info: typing.Dict[int, NetworkSlot]
     server_address: typing.Optional[str]
@@ -456,10 +459,12 @@ class CommonContext:
             'tags': self.tags, 'items_handling': self.items_handling,
             'uuid': Utils.get_unique_identifier(), 'game': self.game, "slot_data": self.want_slot_data,
         }
+
         if kwargs:
             payload.update(kwargs)
         await self.send_msgs([payload])
         await self.send_msgs([{"cmd": "Get", "keys": ["_read_race_mode"]}])
+
 
     async def check_locations(self, locations: typing.Collection[int]) -> set[int]:
         """Send new location checks to the server. Returns the set of actually new locations that were sent."""
@@ -852,6 +857,8 @@ async def process_server_cmd(ctx: CommonContext, args: dict):
     except:
         logger.exception(f"Could not get command from {args}")
         raise
+
+
     if cmd == 'RoomInfo':
         if ctx.seed_name and ctx.seed_name != args["seed_name"]:
             msg = "The server is running a different multiworld than your client is. (invalid seed_name)"
@@ -940,6 +947,14 @@ async def process_server_cmd(ctx: CommonContext, args: dict):
         ctx.hint_points = args.get("hint_points", 0)
         ctx.consume_players_package(args["players"])
         ctx.stored_data_notification_keys.add(f"_read_hints_{ctx.team}_{ctx.slot}")
+        ctx.goal_type = args["slot_data"]["CompletionType"]
+        if args["slot_data"]["DeathLink"] != 0:
+            ctx.death_link = True
+            ctx.tags.add("DeathLink")
+        else:
+            ctx.death_link = False
+
+
         msgs = []
         if ctx.locations_checked:
             msgs.append({"cmd": "LocationChecks",
@@ -1009,6 +1024,7 @@ async def process_server_cmd(ctx: CommonContext, args: dict):
 
     elif cmd == 'InvalidPacket':
         logger.warning(f"Invalid Packet of {args['type']}: {args['text']}")
+
 
     elif cmd == "Bounced":
         tags = args.get("tags", [])
@@ -1098,7 +1114,7 @@ def run_as_textclient(*args):
         tags = CommonContext.tags
         game = "Sonic Robo Blast 2"  # empty matches any game since 0.3.2
         items_handling = 0b111  # receive all items for /received
-        want_slot_data = False  # Can't use game specific slot_data
+        want_slot_data = True  # Can't use game specific slot_data
 
         async def server_auth(self, password_requested: bool = False):
             if password_requested and not self.password:
@@ -1109,6 +1125,7 @@ def run_as_textclient(*args):
         def on_package(self, cmd: str, args: dict):
             if cmd == "Connected":
                 self.game = self.slot_info[self.slot].game
+
 
         async def disconnect(self, allow_autoreconnect: bool = False):
             self.game = ""
@@ -1146,8 +1163,7 @@ def run_as_textclient(*args):
     asyncio.run(main(args))
     print("got to the funny place")
     colorama.deinit()
-def make_thread():
-    print("in makethread")
+
 
 async def item_handler(ctx,file_path):
     file_path = file_path+"/luafiles/APTranslator.dat"
@@ -1283,21 +1299,21 @@ async def item_handler(ctx,file_path):
             emeralds = 7
         f.seek(0x0F)
         if emeralds == 0:
-            f.write(0x01.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x00.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 1:
-            f.write(0x03.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x01.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 2:
-            f.write(0x07.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x03.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 3:
-            f.write(0x0F.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x07.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 4:
-            f.write(0x1F.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x0F.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 5:
-            f.write(0x3F.to_bytes(2,byteorder="little")) #this sucks
+            f.write(0x1F.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 6:
-            f.write(0x3F.to_bytes(2, byteorder="little"))  # this sucks
+            f.write(0x2F.to_bytes(2, byteorder="little"))  # this sucks
         if emeralds == 7:
-            f.write(0x7F.to_bytes(2, byteorder="little"))  # this sucks
+            f.write(0x4F.to_bytes(2, byteorder="little"))  # this sucks
 
         f.seek(0x03)
         f.write(bytes(sent_shields))
@@ -1308,9 +1324,28 @@ async def item_handler(ctx,file_path):
         #todo handle deathlink traps and 1ups
         #if "DeathLink" in ctx.tags:
         #    send_death()
+        f.seek(0x01)
+        is_dead = int.from_bytes(f.read(1), 'little')
+
+        if ctx.death_link_lockout+3<=time.time():
+
+            if ctx.last_death_link+1.1>= time.time():#if a deathlink happened less than 2 seconds ago, kill yourself
+                f.seek(0x00)#received deathlink
+                f.write(0x01.to_bytes(1,byteorder="little"))
+                ctx.death_link_lockout = time.time()
+
+            if is_dead!=0: #outgoing deathlink
+                f.seek(0x01)
+                f.write(0x00.to_bytes(1, byteorder="little"))
+                await ctx.send_death("Egg Rock Zone was too hard for {player}")
+                ctx.death_link_lockout = time.time()
+                print("killed myself")
+        #f.seek(0x01)
+        #f.write(0x00.to_bytes(1, byteorder="little"))
+        #write 0s to both slots if conditions havent been met
 
         #print("wrote new file data")
-        await asyncio.sleep(3)
+        await asyncio.sleep(1)
 
 
 async def file_watcher(ctx,file_path):
@@ -1320,6 +1355,8 @@ async def file_watcher(ctx,file_path):
     while ctx.total_locations is None:
         await asyncio.sleep(1)
         continue
+
+    await ctx.send_msgs([{"cmd": "ConnectUpdate", "tags": ctx.tags}])
     #wait to connect
     try:# once connected verify apgamedat exists
         if not os.path.isfile(file_path2):
@@ -1378,6 +1415,7 @@ async def file_watcher(ctx,file_path):
         f.write(bytes(levelclears))
         f.close()
     except FileNotFoundError:
+
         print("apgamedat.dat does not exist, let SRB2 make a new one...")
     except PermissionError:
         print("could not overwrite old save data (lack of permission). Try closing the file in HXD you dumbass")
@@ -1389,7 +1427,7 @@ async def file_watcher(ctx,file_path):
     os.startfile("srb2win.exe")
     #look into subprocess.Popen, if used correctly, i might be able to acess srb2's console output for commands and
     #recieved notifications
-    time.sleep(8)
+    await asyncio.sleep(10)
     cfg = open(file_path + "/AUTOEXEC.CFG", "w")
     cfg.write("")
     cfg.close()
@@ -1399,7 +1437,8 @@ async def file_watcher(ctx,file_path):
     # create AUTOEXEC.CFG with the text "addfile addons/ArchipelagoSRB2.pk3"
     # launch srb2
     # clear AUTOEXEC.CFG so people dont get confused when they cant uninstall the ap mod
-
+    while not os.path.isfile(file_path2):
+        await asyncio.sleep(1) # wait for srb2 to make new apgamedat if it doesnt exist
     previous = os.stat(file_path2).st_mtime
     while True:
         #run the console command to get recieved items
@@ -1424,7 +1463,14 @@ async def file_watcher(ctx,file_path):
                         bit = (byte >> j) & 1
                         if bit==1:
                             locs_to_send.add(197+(8*i + j))
-                            if 197+(8*i + j) == 237: #good ending
+                            if 197+(8*i + j) == 217 and ctx.goal_type == 0: #bcz3 clear (bad ending)
+                                ctx.finished_game = True
+                                await ctx.send_msgs([{
+                                    "cmd": "StatusUpdate",
+                                    "status": ClientStatus.CLIENT_GOAL
+                                }])
+
+                            if 197+(8*i + j) == 237 and ctx.goal_type == 1: #good ending
                                 ctx.finished_game = True
                                 await ctx.send_msgs([{
                                     "cmd": "StatusUpdate",
