@@ -1166,8 +1166,13 @@ def run_as_textclient(*args):
 
 
 async def item_handler(ctx,file_path):
+    file_path2 = file_path+"/apgamedat1.ssg"
     file_path = file_path+"/luafiles/APTranslator.dat"
     f = open(file_path, 'w+b')
+
+
+
+
     #set up new save file here
     #dont need to zero anything out because the first write will overwrite everything wrong
     final_write = [0,0,0,0]
@@ -1319,11 +1324,16 @@ async def item_handler(ctx,file_path):
         f.write(bytes(sent_shields))
         f.seek(0x0B)
         f.write(bytes(final_write))#TODO change to only write on startup, file close, or new item received
-        #f.seek(0x10) #always select No save to go back to the ap hub
-        #f.write(0x7D.to_bytes(2,byteorder="little")) #or find a console command that does that
+
+        try:
+            g = open(file_path2, 'r+b')
+            g.seek(0x10)  # always select No save to go back to the ap hub
+            g.write(0x7D.to_bytes(2, byteorder="little"))  # or find a console command that does that
+            g.close()
+        except:
+            print("save file 1 not found, create it to more easily return to the multiworld hub")
+
         #todo handle deathlink traps and 1ups
-        #if "DeathLink" in ctx.tags:
-        #    send_death()
         f.seek(0x01)
         is_dead = int.from_bytes(f.read(1), 'little')
 
