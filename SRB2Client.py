@@ -284,6 +284,7 @@ class CommonContext:
     death_link: float = time.time()
     death_link_lockout: float = time.time()
     goal_type: int = None
+    bcz_emblems: int = 0
     # remaining type info
     slot_info: typing.Dict[int, NetworkSlot]
     server_address: typing.Optional[str]
@@ -948,6 +949,7 @@ async def process_server_cmd(ctx: CommonContext, args: dict):
         ctx.consume_players_package(args["players"])
         ctx.stored_data_notification_keys.add(f"_read_hints_{ctx.team}_{ctx.slot}")
         ctx.goal_type = args["slot_data"]["CompletionType"]
+        ctx.bcz_emblems = args["slot_data"]["BlackCoreEmblems"]
         if args["slot_data"]["DeathLink"] != 0:
             ctx.death_link = True
             ctx.tags.add("DeathLink")
@@ -1187,6 +1189,7 @@ async def item_handler(ctx,file_path):
         traps = 0
         emeralds = 0
         emblemhints = 0
+        emblems = 0
         f.seek(0x12)
         num_traps = int.from_bytes(f.read(2), 'little')
 
@@ -1196,10 +1199,11 @@ async def item_handler(ctx,file_path):
                 emeralds+=1
                 continue
             if id==1:
+                emblems += 1
                 continue
             if id == 3:
                 emblemhints+=1
-            if id==4 or id==5 or id==6:
+            if id==4 or id==5 or id==6 or id==7 or id == 8:
                 traps += 1
                 if traps>num_traps:
 
@@ -1210,6 +1214,10 @@ async def item_handler(ctx,file_path):
                         f.write(0x02.to_bytes(2,byteorder="little"))
                     if id == 5:# gravity boots
                         f.write(0x03.to_bytes(2,byteorder="little"))
+                    if id == 7:#replay tutorial
+                        f.write(0x04.to_bytes(2, byteorder="little"))
+                    if id == 8:#ring drain
+                        f.write(0x05.to_bytes(2, byteorder="little"))
                     f.seek(0x12)
                     f.write(traps.to_bytes(2,byteorder="little"))
 
@@ -1232,7 +1240,7 @@ async def item_handler(ctx,file_path):
                 final_write[0] = final_write[0] + 32
             if id == 16:#egg rock
                 final_write[0] = final_write[0] + 64
-            if id == 17:#black core
+            if id == 17 or (ctx.bcz_emblems>0 and emblems >= ctx.bcz_emblems):#black core
                 final_write[0] = final_write[0] + 128
             if id == 18: #frozen hillside
                 final_write[1] = final_write[1] + 8
@@ -1316,9 +1324,9 @@ async def item_handler(ctx,file_path):
         if emeralds == 5:
             f.write(0x1F.to_bytes(2,byteorder="little")) #this sucks
         if emeralds == 6:
-            f.write(0x2F.to_bytes(2, byteorder="little"))  # this sucks
+            f.write(0x3F.to_bytes(2, byteorder="little"))  # this sucks
         if emeralds == 7:
-            f.write(0x4F.to_bytes(2, byteorder="little"))  # this sucks
+            f.write(0x7F.to_bytes(2, byteorder="little"))  # this sucks
 
         f.seek(0x03)
         f.write(bytes(sent_shields))
@@ -1339,7 +1347,7 @@ async def item_handler(ctx,file_path):
 
         if ctx.death_link_lockout+4<=time.time():
 
-            if ctx.last_death_link+1.5>= time.time():#if a deathlink happened less than 2 seconds ago, kill yourself
+            if ctx.last_death_link+3.5>= time.time():#if a deathlink happened less than 2 seconds ago, kill yourself
                 f.seek(0x00)#received deathlink
                 f.write(0x01.to_bytes(1,byteorder="little"))
                 ctx.death_link_lockout = time.time()
@@ -1348,7 +1356,9 @@ async def item_handler(ctx,file_path):
             if is_dead!=0: #outgoing deathlink
                 f.seek(0x01)
                 f.write(0x00.to_bytes(1, byteorder="little"))
-                await ctx.send_death("Egg Rock Zone was too hard for {player}")
+                messages = ["Egg Rock Zone was too hard for "+ctx.player_names[ctx.slot]]
+
+                await ctx.send_death("Egg Rock Zone was too hard for",ctx.player_names[ctx.slot])
                 ctx.death_link_lockout = time.time()
                 print("killed myself")
         else:
@@ -1376,8 +1386,8 @@ async def file_watcher(ctx,file_path):
         checkma = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
         levelclears = [0,0,0,0,0,0]
         for i in ctx.checked_locations:
-            if i >196:
-                x = i -197
+            if i >197:
+                x = i -198
                 r1 = math.floor(x / 8)
                 r2 = x % 8
 
@@ -1397,9 +1407,11 @@ async def file_watcher(ctx,file_path):
                     levelclears[r1]+=64
                 if r2 == 7:
                     levelclears[r1]+=128
-            if i <197:
+            if i <198:
+                i=i+1
                 r1 = math.floor(i/8)
                 r2 = i % 8
+
                 #divide then floor to get byte number
                 #modulo to get byte value to set
                 if r2 == 0:
@@ -1466,22 +1478,22 @@ async def file_watcher(ctx,file_path):
                     for j in range(8):
                         bit = (byte >> j) & 1
                         if bit==1:
-                            locs_to_send.add(8*i + j)
+                            locs_to_send.add(8*i + j+1)
                 f.seek(0x457)
                 for i in range(0, 0x5):
                     byte = int.from_bytes(f.read(1), 'little')
                     for j in range(8):
                         bit = (byte >> j) & 1
                         if bit==1:
-                            locs_to_send.add(197+(8*i + j))
-                            if 197+(8*i + j) == 217 and ctx.goal_type == 0: #bcz3 clear (bad ending)
+                            locs_to_send.add(197+(8*i + j)+1)
+                            if 197+(8*i + j) == 218 and ctx.goal_type == 0: #bcz3 clear (bad ending)
                                 ctx.finished_game = True
                                 await ctx.send_msgs([{
                                     "cmd": "StatusUpdate",
                                     "status": ClientStatus.CLIENT_GOAL
                                 }])
 
-                            if 197+(8*i + j) == 237 and ctx.goal_type == 1: #good ending
+                            if 197+(8*i + j) == 238 and ctx.goal_type == 1: #good ending
                                 ctx.finished_game = True
                                 await ctx.send_msgs([{
                                     "cmd": "StatusUpdate",
